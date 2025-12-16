@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { 
@@ -12,8 +12,8 @@ import {
   DollarSign, 
   ChevronDown,
   ChevronUp,
-  ChevronLeft, // 新增
-  ChevronRight, // 新增
+  ChevronLeft, 
+  ChevronRight, 
   X,
   Plus,
   Calendar,
@@ -34,7 +34,9 @@ import {
   Ban,
   Users,
   Clock,
-  MapPin
+  MapPin,
+  BarChart3, // 新增
+  ArrowUpDown // 新增
 } from 'lucide-react';
 
 // --- 类型定义 ---
@@ -202,11 +204,101 @@ const NotificationBar = () => {
   );
 };
 
-const SearchPanel = () => {
+interface StatsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const StatsModal = ({ isOpen, onClose }: StatsModalProps) => {
+  const [data, setData] = useState<any[]>([]);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const names = ['张伟', '李强', '王芳', '刘洋', '陈静', '赵军', '孙丽', '周杰'];
+      const mockData = names.map((name, index) => {
+        const retrievalCount = Math.floor(Math.random() * 200) + 50;
+        const undertakeCount = Math.floor(retrievalCount * (0.6 + Math.random() * 0.3));
+        const successRate = (undertakeCount / retrievalCount);
+        const performance = undertakeCount * (100 + Math.random() * 100);
+        return { id: index, name, retrievalCount, undertakeCount, successRate, performance };
+      });
+      setData(mockData);
+    }
+  }, [isOpen]);
+
+  const sortedData = useMemo(() => {
+    if (!sortConfig) return data;
+    return [...data].sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [data, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(current => ({
+      key,
+      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white w-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="bg-slate-50 border-b p-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={20} className="text-blue-600" />
+            <h3 className="font-bold text-slate-800">捞单统计</h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full transition-colors"><X size={20} className="text-slate-500" /></button>
+        </div>
+        <div className="p-4 bg-white flex-1 overflow-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <tr>
+                <th className="px-3 py-2 font-bold">业务员</th>
+                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('retrievalCount')}>
+                    <div className="flex items-center gap-1">捞单数量 <ArrowUpDown size={12} className="text-slate-400" /></div>
+                </th>
+                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('undertakeCount')}>
+                     <div className="flex items-center gap-1">承担数量 <ArrowUpDown size={12} className="text-slate-400" /></div>
+                </th>
+                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('successRate')}>
+                     <div className="flex items-center gap-1">成单率 <ArrowUpDown size={12} className="text-slate-400" /></div>
+                </th>
+                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('performance')}>
+                     <div className="flex items-center gap-1">业绩 <ArrowUpDown size={12} className="text-slate-400" /></div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {sortedData.map((row) => (
+                <tr key={row.id} className="hover:bg-blue-50 transition-colors">
+                  <td className="px-3 py-2 font-medium text-slate-700">{row.name}</td>
+                  <td className="px-3 py-2 font-mono text-slate-600">{row.retrievalCount}</td>
+                  <td className="px-3 py-2 font-mono text-slate-600">{row.undertakeCount}</td>
+                  <td className="px-3 py-2 font-mono text-emerald-600 font-bold">{(row.successRate * 100).toFixed(1)}%</td>
+                  <td className="px-3 py-2 font-mono text-orange-600 font-bold">¥{row.performance.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const SearchPanel = ({ onToggleRetrievalFilter, isRetrievalFilterActive }: { onToggleRetrievalFilter: () => void, isRetrievalFilterActive: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [timeType, setTimeType] = useState('create');
   const [personType, setPersonType] = useState('order');
   const [otherType, setOtherType] = useState('status');
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
 
   const stats = {
     retrieved: 158,
@@ -230,12 +322,25 @@ const SearchPanel = () => {
                 <div className="flex items-center gap-2 shrink-0 mr-8">
                     <Activity size={20} className="text-blue-600" />
                     <span className="text-base font-bold text-slate-800">数据概览</span>
+                    <button 
+                        onClick={() => setStatsModalOpen(true)}
+                        className="flex items-center gap-1 text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-50 transition-colors shadow-sm ml-1"
+                    >
+                        <BarChart3 size={12} /> 捞单统计
+                    </button>
                 </div>
                 <div className="flex items-center flex-1 justify-around gap-4 overflow-hidden h-full">
-                    <div className="flex items-baseline gap-2"><span className="text-xs font-bold text-slate-500">捞单数:</span><span className="text-xl font-extrabold text-slate-800">{stats.retrieved}</span></div>
-                    <div className="flex items-baseline gap-2"><span className="text-xs font-bold text-slate-500">成功数:</span><span className="text-xl font-extrabold text-blue-600">{stats.success}</span></div>
-                    <div className="flex items-baseline gap-2"><span className="text-xs font-bold text-slate-500">成单率:</span><span className="text-xl font-extrabold text-emerald-600">{stats.rate}</span></div>
-                    <div className="flex items-baseline gap-2"><span className="text-xs font-bold text-slate-500">业绩:</span><span className="text-xl font-extrabold text-orange-600">{stats.performance}</span></div>
+                    <div 
+                        className={`flex items-baseline gap-2 cursor-pointer px-2 py-1 rounded transition-all select-none ${isRetrievalFilterActive ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-200' : 'hover:bg-white/50 text-slate-500'}`}
+                        onClick={onToggleRetrievalFilter}
+                        title="点击只看今日捞单"
+                    >
+                        <span className={`text-xs font-bold ${isRetrievalFilterActive ? 'text-blue-100' : 'text-slate-500'}`}>捞单数:</span>
+                        <span className={`text-xl font-extrabold ${isRetrievalFilterActive ? 'text-white' : 'text-slate-800'}`}>{stats.retrieved}</span>
+                    </div>
+                    <div className={`flex items-baseline gap-2 ${isRetrievalFilterActive ? 'opacity-30 blur-[1px]' : ''} transition-all duration-300`}><span className="text-xs font-bold text-slate-500">成功数:</span><span className="text-xl font-extrabold text-blue-600">{stats.success}</span></div>
+                    <div className={`flex items-baseline gap-2 ${isRetrievalFilterActive ? 'opacity-30 blur-[1px]' : ''} transition-all duration-300`}><span className="text-xs font-bold text-slate-500">成单率:</span><span className="text-xl font-extrabold text-emerald-600">{stats.rate}</span></div>
+                    <div className={`flex items-baseline gap-2 ${isRetrievalFilterActive ? 'opacity-30 blur-[1px]' : ''} transition-all duration-300`}><span className="text-xs font-bold text-slate-500">业绩:</span><span className="text-xl font-extrabold text-orange-600">{stats.performance}</span></div>
                 </div>
              </div>
           </div>
@@ -321,6 +426,7 @@ const SearchPanel = () => {
              )}
           </div>
         </div>
+        <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} />
     </div>
   );
 };
@@ -547,6 +653,7 @@ const App = () => {
   const [chatState, setChatState] = useState<{isOpen: boolean; role: string; order: Order | null;}>({ isOpen: false, role: '', order: null });
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isRetrievalFilterActive, setIsRetrievalFilterActive] = useState(false); // 新增状态
   
   const handleDispatch = (id: number) => {
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: OrderStatus.Completed, dispatchStatus: DispatchStatus.Normal } : o));
@@ -561,19 +668,38 @@ const App = () => {
 
   const handleOpenChat = (role: string, order: Order) => { setChatState({ isOpen: true, role, order }); };
 
-  const sortedData = [...orders].sort((a, b) => {
-    const getUrgency = (s: DispatchStatus, os: OrderStatus) => os !== OrderStatus.PendingDispatch ? 0 : (s === DispatchStatus.Urgent ? 3 : (s === DispatchStatus.Timeout ? 2 : 1));
-    return getUrgency(b.dispatchStatus, b.status) - getUrgency(a.dispatchStatus, a.status);
-  });
+  const sortedData = useMemo(() => {
+    let filtered = [...orders];
+    
+    // 如果激活了捞单统计筛选，模拟只显示"今天"的捞单
+    if (isRetrievalFilterActive) {
+        // 使用 id % 3 === 0 来模拟筛选一部分数据，假设这些是"今日捞单"
+        filtered = filtered.filter(order => order.id % 3 === 0);
+    }
+
+    return filtered.sort((a, b) => {
+      const getUrgency = (s: DispatchStatus, os: OrderStatus) => os !== OrderStatus.PendingDispatch ? 0 : (s === DispatchStatus.Urgent ? 3 : (s === DispatchStatus.Timeout ? 2 : 1));
+      return getUrgency(b.dispatchStatus, b.status) - getUrgency(a.dispatchStatus, a.status);
+    });
+  }, [orders, isRetrievalFilterActive]);
 
   const totalItems = sortedData.length;
   const totalPages = Math.ceil(totalItems / pageSize);
+  
+  // 确保当前页不超出总页数
+  useEffect(() => {
+      if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
   const currentData = sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="h-screen bg-slate-200 p-2 flex flex-col overflow-hidden font-sans">
       <NotificationBar />
-      <SearchPanel />
+      <SearchPanel 
+        onToggleRetrievalFilter={() => setIsRetrievalFilterActive(!isRetrievalFilterActive)} 
+        isRetrievalFilterActive={isRetrievalFilterActive}
+      />
       
       <div className="bg-white rounded-lg shadow-sm border border-gray-300 flex-1 flex flex-col overflow-hidden mt-2">
         <div className="overflow-auto flex-1 w-full">
