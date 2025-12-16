@@ -212,29 +212,83 @@ interface StatsModalProps {
 const StatsModal = ({ isOpen, onClose }: StatsModalProps) => {
   const [data, setData] = useState<any[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  
+  // Filters State
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   useEffect(() => {
     if (isOpen) {
-      const names = ['张伟', '李强', '王芳', '刘洋', '陈静', '赵军', '孙丽', '周杰'];
-      const mockData = names.map((name, index) => {
+      const groups = ['直营一部', '直营二部', '渠道部', '大客户部'];
+      const baseNames = ['张伟', '李强', '王芳', '刘洋', '陈静', '赵军', '孙丽', '周杰', '吴艳', '郑华'];
+      
+      const mockData = Array.from({ length: 88 }).map((_, index) => {
+        const name = `${baseNames[index % 10]}${Math.floor(index / 10) + 1}`; 
+        const group = groups[index % 4];
         const retrievalCount = Math.floor(Math.random() * 200) + 50;
         const undertakeCount = Math.floor(retrievalCount * (0.6 + Math.random() * 0.3));
         const successRate = (undertakeCount / retrievalCount);
         const performance = undertakeCount * (100 + Math.random() * 100);
-        return { id: index, name, retrievalCount, undertakeCount, successRate, performance };
+        
+        // Mock date for filtering simulation (last 30 days)
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+        const dateStr = date.toISOString().split('T')[0];
+
+        return { id: index, name, group, retrievalCount, undertakeCount, successRate, performance, date: dateStr };
       });
       setData(mockData);
+      setCurrentPage(1); // Reset page on open
+      setStartDate('');
+      setEndDate('');
+      setSelectedGroup('');
     }
   }, [isOpen]);
 
+  const filteredData = useMemo(() => {
+    let res = [...data];
+    if (selectedGroup) {
+        res = res.filter(item => item.group === selectedGroup);
+    }
+    if (startDate) {
+        res = res.filter(item => item.date >= startDate);
+    }
+    if (endDate) {
+        res = res.filter(item => item.date <= endDate);
+    }
+    return res;
+  }, [data, selectedGroup, startDate, endDate]);
+
   const sortedData = useMemo(() => {
-    if (!sortConfig) return data;
-    return [...data].sort((a, b) => {
+    if (!sortConfig) return filteredData;
+    return [...filteredData].sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
       if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [data, sortConfig]);
+  }, [filteredData, sortConfig]);
+
+  const totalItems = sortedData.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  
+  // Ensure current page is valid after filtering
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+    } else if (totalPages > 0 && currentPage === 0) {
+        setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedData = useMemo(() => {
+      const start = (currentPage - 1) * pageSize;
+      return sortedData.slice(start, start + pageSize);
+  }, [sortedData, currentPage, pageSize]);
 
   const handleSort = (key: string) => {
     setSortConfig(current => ({
@@ -247,45 +301,112 @@ const StatsModal = ({ isOpen, onClose }: StatsModalProps) => {
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="bg-slate-50 border-b p-4 flex justify-between items-center">
+      <div className="bg-white w-[700px] h-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="bg-slate-50 border-b p-4 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
             <BarChart3 size={20} className="text-blue-600" />
             <h3 className="font-bold text-slate-800">捞单统计</h3>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full transition-colors"><X size={20} className="text-slate-500" /></button>
         </div>
-        <div className="p-4 bg-white flex-1 overflow-auto">
+
+        {/* Filters */}
+        <div className="p-3 border-b border-slate-100 bg-white flex gap-4 items-center shrink-0 text-xs">
+             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                <span className="font-bold text-slate-600">时间:</span>
+                <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)} 
+                    className="bg-transparent outline-none text-slate-600 w-24"
+                />
+                <span className="text-slate-400">-</span>
+                <input 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(e) => setEndDate(e.target.value)} 
+                    className="bg-transparent outline-none text-slate-600 w-24"
+                />
+             </div>
+
+             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                <span className="font-bold text-slate-600">组别:</span>
+                <select 
+                    value={selectedGroup} 
+                    onChange={(e) => setSelectedGroup(e.target.value)} 
+                    className="bg-transparent outline-none text-slate-600 w-24 cursor-pointer"
+                >
+                    <option value="">全部</option>
+                    <option value="直营一部">直营一部</option>
+                    <option value="直营二部">直营二部</option>
+                    <option value="渠道部">渠道部</option>
+                    <option value="大客户部">大客户部</option>
+                </select>
+             </div>
+             
+             <div className="ml-auto text-slate-400">
+                共找到 <span className="font-bold text-blue-600">{totalItems}</span> 条记录
+             </div>
+        </div>
+
+        <div className="p-0 bg-white flex-1 overflow-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
               <tr>
-                <th className="px-3 py-2 font-bold">业务员</th>
-                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('retrievalCount')}>
+                <th className="px-4 py-3 font-bold">业务员</th>
+                <th className="px-4 py-3 font-bold">组别</th>
+                <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('retrievalCount')}>
                     <div className="flex items-center gap-1">捞单数量 <ArrowUpDown size={12} className="text-slate-400" /></div>
                 </th>
-                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('undertakeCount')}>
-                     <div className="flex items-center gap-1">承担数量 <ArrowUpDown size={12} className="text-slate-400" /></div>
+                <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('undertakeCount')}>
+                     <div className="flex items-center gap-1">成单数量 <ArrowUpDown size={12} className="text-slate-400" /></div>
                 </th>
-                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('successRate')}>
+                <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('successRate')}>
                      <div className="flex items-center gap-1">成单率 <ArrowUpDown size={12} className="text-slate-400" /></div>
                 </th>
-                <th className="px-3 py-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('performance')}>
+                <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('performance')}>
                      <div className="flex items-center gap-1">业绩 <ArrowUpDown size={12} className="text-slate-400" /></div>
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {sortedData.map((row) => (
+              {paginatedData.length > 0 ? paginatedData.map((row) => (
                 <tr key={row.id} className="hover:bg-blue-50 transition-colors">
-                  <td className="px-3 py-2 font-medium text-slate-700">{row.name}</td>
-                  <td className="px-3 py-2 font-mono text-slate-600">{row.retrievalCount}</td>
-                  <td className="px-3 py-2 font-mono text-slate-600">{row.undertakeCount}</td>
-                  <td className="px-3 py-2 font-mono text-emerald-600 font-bold">{(row.successRate * 100).toFixed(1)}%</td>
-                  <td className="px-3 py-2 font-mono text-orange-600 font-bold">¥{row.performance.toFixed(2)}</td>
+                  <td className="px-4 py-2 font-medium text-slate-700">{row.name}</td>
+                  <td className="px-4 py-2 text-slate-500 text-xs">{row.group}</td>
+                  <td className="px-4 py-2 font-mono text-slate-600">{row.retrievalCount}</td>
+                  <td className="px-4 py-2 font-mono text-slate-600">{row.undertakeCount}</td>
+                  <td className="px-4 py-2 font-mono text-emerald-600 font-bold">{(row.successRate * 100).toFixed(1)}%</td>
+                  <td className="px-4 py-2 font-mono text-orange-600 font-bold">¥{row.performance.toFixed(2)}</td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-400">暂无数据</td>
+                </tr>
+              )}
             </tbody>
           </table>
+        </div>
+        
+        {/* Pagination */}
+        <div className="bg-slate-50 border-t border-slate-200 p-2 flex justify-end items-center gap-2 shrink-0">
+             <button 
+                disabled={currentPage === 1 || totalPages === 0}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="p-1 rounded border border-slate-300 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+             >
+                <ChevronLeft size={16} />
+             </button>
+             <span className="text-xs text-slate-600">
+                第 <span className="font-bold">{totalPages === 0 ? 0 : currentPage}</span> / {totalPages} 页
+             </span>
+             <button 
+                disabled={currentPage === totalPages || totalPages === 0}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="p-1 rounded border border-slate-300 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+             >
+                <ChevronRight size={16} />
+             </button>
         </div>
       </div>
     </div>,
